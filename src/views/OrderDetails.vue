@@ -301,12 +301,15 @@
       </div>
       
       <!-- Admin Verification Status -->
-      <div v-if="order.payment_method !== 'COD'" class="mt-4 p-3 rounded-lg" :class="getVerificationStatusClass(order.status)">
+      <div v-if="order.payment_method !== 'COD'" class="mt-4 p-3 rounded-lg" :class="getVerificationStatusClass(order.status, order.payment_verified, order.payment_rejection_reason)">
         <div class="flex items-center">
-          <component :is="getVerificationIcon(order.status)" class="h-5 w-5 mr-2" />
+          <component :is="getVerificationIcon(order.status, order.payment_verified, order.payment_rejection_reason)" class="h-5 w-5 mr-2" />
           <div>
-            <p class="font-medium">{{ getVerificationTitle(order.status) }}</p>
-            <p class="text-sm">{{ getVerificationMessage(order.status) }}</p>
+            <p class="font-medium">{{ getVerificationTitle(order.status, order.payment_verified, order.payment_rejection_reason) }}</p>
+            <p class="text-sm">{{ getVerificationMessage(order.status, order.payment_verified, order.payment_rejection_reason) }}</p>
+            <p v-if="order.payment_verified_at" class="text-xs text-gray-500 mt-1">
+              Verified on: {{ formatDate(order.payment_verified_at) }}
+            </p>
           </div>
         </div>
       </div>
@@ -811,20 +814,32 @@ const getPaymentStatusText = (status) => {
   return 'Verified'
 }
 
-const getVerificationStatusClass = (status) => {
+const getVerificationStatusClass = (status, verified, rejectionReason) => {
+  if (verified) return 'bg-green-50 border border-green-200'
+  if (rejectionReason) return 'bg-red-50 border border-red-200'
   if (status === 'Pending') return 'bg-yellow-50 border border-yellow-200'
   return 'bg-green-50 border border-green-200'
 }
 
-const getVerificationIcon = (status) => {
-  return status === 'Pending' ? Clock : CheckCircle
+const getVerificationIcon = (status, verified, rejectionReason) => {
+  if (verified) return CheckCircle
+  if (rejectionReason) return AlertTriangle
+  return Clock
 }
 
-const getVerificationTitle = (status) => {
-  return status === 'Pending' ? 'Payment Verification Pending' : 'Payment Verified'
+const getVerificationTitle = (status, verified, rejectionReason) => {
+  if (verified) return 'Payment Verified ✅'
+  if (rejectionReason) return 'Payment Rejected ❌'
+  return 'Payment Verification Pending ⏳'
 }
 
-const getVerificationMessage = (status) => {
+const getVerificationMessage = (status, verified, rejectionReason) => {
+  if (verified) {
+    return 'Your payment has been verified by our admin team. Your order is now confirmed and being processed.'
+  }
+  if (rejectionReason) {
+    return `Payment was rejected by admin. Reason: ${rejectionReason}. Please upload a new payment proof or contact support.`
+  }
   if (status === 'Pending') {
     return 'Our admin is reviewing your payment proof. This usually takes 5-15 minutes during business hours.'
   }
@@ -1044,8 +1059,20 @@ const subscribeToOrderUpdates = () => {
       schema: 'public',
       table: 'orders',
       filter: `id=eq.${route.params.id}`
-    }, () => {
-      fetchOrder()
+    }, (payload) => {
+      console.log('Order updated:', payload.new)
+      // Update the order data with new information
+      order.value = { ...order.value, ...payload.new }
+      
+      // Show toast notification for payment status changes
+      if (payload.new.payment_verified === true && order.value.payment_verified !== true) {
+        toast.success('Payment approved by admin! Your order is now confirmed.')
+      } else if (payload.new.payment_rejection_reason && !order.value.payment_rejection_reason) {
+        toast.error(`Payment rejected: ${payload.new.payment_rejection_reason}`)
+      }
+      
+      // Regenerate QR code if order data changed
+      generateQRCode(order.value)
     })
     .subscribe()
 }

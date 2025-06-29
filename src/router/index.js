@@ -77,12 +77,14 @@ const routes = [
         component: Profile,
       },
       {
-        path: "order/:id",
+        path: "order-details/:id",
         name: "OrderDetails",
         component: OrderDetails,
+        props: true,
       },
     ],
   },
+
   {
     path: "/:pathMatch(.*)*",
     redirect: "/",
@@ -101,12 +103,14 @@ const router = createRouter({
   },
 })
 
-// Optimized navigation guards
+// Simplified navigation guards - only user authentication
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
   try {
     console.log("Router guard: Navigating to:", to.path)
+    console.log("Router guard: Route params:", to.params)
+    console.log("Router guard: Route name:", to.name)
 
     // For public routes, allow immediate access
     if (!to.meta.requiresAuth && !to.meta.requiresGuest) {
@@ -126,11 +130,10 @@ router.beforeEach(async (to, from, next) => {
       }
     }
 
-    // For protected routes, ensure auth is initialized
+    // For protected user routes, ensure auth is initialized
     if (to.meta.requiresAuth) {
       if (!authStore.initialized) {
         console.log("Router guard: Initializing auth for protected route")
-
         try {
           await Promise.race([
             authStore.initialize(),
@@ -147,14 +150,15 @@ router.beforeEach(async (to, from, next) => {
         return next("/login")
       }
 
-      console.log("Router guard: User authenticated, allowing access")
+      console.log("Router guard: User authenticated, allowing access to:", to.path)
       return next()
     }
 
+    console.log("Router guard: Default case, allowing navigation")
     next()
   } catch (error) {
     console.error("Router guard error:", error)
-    // On error, redirect based on route type
+    // On error, redirect to login for protected routes
     if (to.meta.requiresAuth) {
       next("/login")
     } else {

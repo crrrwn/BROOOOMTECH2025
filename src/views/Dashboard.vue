@@ -136,7 +136,7 @@
               {{ order.status }}
             </span>
             <router-link
-              :to="`/dashboard/order/${order.id}`"
+              :to="`/dashboard/order-details/${order.id}`"
               class="ml-3 text-green-600 hover:text-green-700"
             >
               <Eye class="h-4 w-4" />
